@@ -46,6 +46,7 @@ class DatasetInitModel(BaseModel):
   remove_news_agency_name: Optional[bool] = False
   news_agency_name_path: str = ""
   news_agency_coloumn_name: str = "name"
+  topk_as_explanation: Optional[int] = 2
 
   class Config:
     arbitrary_types_allowed = True
@@ -96,6 +97,7 @@ class StanceDataset(Dataset):
     self.ner_none_token_id = init_params.ner_none_token_id
     self.save_load_features_path = init_params.save_load_features_path
     self.remove_news_agency_name = init_params.remove_news_agency_name
+    self.topk_as_explanation= init_params.topk_as_explanation
 
     if self.remove_news_agency_name:
       assert (len(init_params.news_agency_name_path) > 1 and len(init_params.news_agency_coloumn_name)>1), "Set file path and coloumn name of news agency names!"
@@ -172,7 +174,8 @@ class StanceDataset(Dataset):
 
     self.log("Tokenizing by using " + self.transformer_model_path)
 
-    lst_target_text = []    
+    lst_target_text = []
+    lst_explanation = []    
 
     # NER and similarity features path
     path, dataset_name = os.path.split(self.data_set_path)
@@ -215,20 +218,26 @@ class StanceDataset(Dataset):
       similarity_features = np.zeros((self.clean_claims.shape[0]
         , (self.similarity_features_no_for_start + self.similarity_features_no_for_end)), dtype=float)    
 
-      for index, (claim, text) in enumerate(zip(self.clean_claims.tolist(), self.clean_texts.tolist())):
+      for index, (claim, text, label) in enumerate(zip(self.clean_claims.tolist(), self.clean_texts.tolist(), self.labels)):
         target_text = text
         
         sentence_list, similarity_score = self.__get_claim_similarity_with_text_sentences(claim, target_text)
-        similarity_features[index] = self.__extract_similarity_features(claim, target_text, sentence_list, similarity_score)
-              
+        similarity_features[index] = self.__extract_similarity_features(sentence_list, similarity_score)
+        
+        if label== 3: # if unrelated
+          explanation= "ادعای وارد شده در متن گزارش نشده است."
+        else:
+          explanation= self.__extract_similar_sentences(sentence_list, similarity_score, self.topk_as_explanation)
+
         if self.remove_dissimilar_sentences and not exists(extracted_text_path):
           pair_sequence_token_count = self.__vectorizer(claim, text, return_tensors="pt")['input_ids'][0].shape[0]
           # 4 is just a threshold for special tokens
           if pair_sequence_token_count > (self.max_length + 4):
-            target_text = self.__extract_similar_sentences(claim, text, sentence_list, similarity_score)
+            target_text = self.__extract_similar_sentences(sentence_list, similarity_score, self.similar_sentence_no)
             extracted_sentence_instances += 1        
           
         lst_target_text.append(target_text)
+        lst_explanation.append(explanation)
 
         if index % 1000 == 0:
           self.log(("-"*20) + str(index) + ("-"*20))
@@ -258,15 +267,19 @@ class StanceDataset(Dataset):
       np.savez_compressed(similarity_feature_path, self._similarity_features)      
       df_target_text = pd.DataFrame(lst_target_text)
       df_target_text.columns = ["text"]
-      df_target_text.to_excel(extracted_text_path, encoding = 'utf-8')
+      df_target_text["explanation"]= lst_explanation
+      df_target_text.to_excel(extracted_text_path)
       # End of saving extracted features and sentences
     else: # load similarity features
       self.log("Loading similarity features ...")
       self._similarity_features = np.load(similarity_feature_path)['arr_0']
       
       lst_target_text = self.clean_texts.tolist()
+      saved_context_df= pd.read_excel(extracted_text_path)
+
+      lst_explanation= saved_context_df["explanation"].tolist()      
       if self.remove_dissimilar_sentences:
-        lst_target_text = pd.read_excel(extracted_text_path)["text"].tolist()
+        lst_target_text = saved_context_df["text"].tolist()
    
     # End of NER and similarity features
 
@@ -283,6 +296,10 @@ class StanceDataset(Dataset):
     , padding= self.padding, truncation=self.truncation, max_length= self.claim_max_length)       
     #End of tokenizing
 
+    self.final_context = lst_target_text
+    self.explanation = lst_explanation
+
+    self.log(self._pair_sequence_features["input_ids"].shape[0], self._claim_features["input_ids"].shape[0], self._similarity_features.shape[0], self._ner_features.shape[0], self._dataset_size)
     assert self._pair_sequence_features["input_ids"].shape[0] == self._claim_features["input_ids"].shape[0] == self._similarity_features.shape[0] == self._ner_features.shape[0] ==  self._dataset_size, "The size of features and the dataset is not equal!"
 
     self.log('Preparing features done!')
@@ -305,7 +322,7 @@ class StanceDataset(Dataset):
     return sentence_list, similarity_score
 
 
-  def __extract_similarity_features(self, claim, text, sentence_list, similarity_score):    
+  def __extract_similarity_features(self, sentence_list, similarity_score):    
     
     similarity_feature = np.zeros((1, (self.similarity_features_no_for_start + self.similarity_features_no_for_end)), dtype=float)
     
@@ -324,7 +341,7 @@ class StanceDataset(Dataset):
     return similarity_feature
 
 
-  def __extract_similar_sentences(self, claim, text, sentence_list, similarity_score):
+  def __extract_similar_sentences(self, sentence_list, similarity_score, result_sent_no):
     
     # deep copy
     sorted_similarity_score = similarity_score[:]
@@ -332,7 +349,7 @@ class StanceDataset(Dataset):
         
     # get indexs of top similar sentences
     sorted_sentence_index = []
-    for score in sorted_similarity_score[-self.similar_sentence_no:]:
+    for score in sorted_similarity_score[-result_sent_no:]:
       sorted_sentence_index.append(similarity_score.index(score))
 
     # sort indexs of top similar sentences and concat all sentences in order

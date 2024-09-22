@@ -1,4 +1,4 @@
-from dadmatools.models.normalizer import Normalizer
+from dadmatools.normalizer import Normalizer
 import re
 
 

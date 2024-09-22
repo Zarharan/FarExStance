@@ -14,7 +14,8 @@ class TorchTrainer:
     def __init__(self, model, train_dataloader, valid_dataloader, optimizer, loss_fn
                  , device, accumulation_steps, log_func, vectorizer = None, test_dataloader = None):
       
-      self.model = model.to(device)
+      if model:
+        self.model = model.to(device)
       self.device = device
       self.train_dataloader = train_dataloader
       self.valid_dataloader = valid_dataloader
@@ -207,7 +208,7 @@ class TorchTrainer:
 
       result_metrics= self.__compute_metrics(pred_labels, true_labels, loss, "Test")
        
-      return loss, result_metrics
+      return loss, result_metrics, pred_labels
 
 
     def __get_model_input(self, info):
@@ -234,7 +235,10 @@ class TorchTrainer:
       recall = metrics.recall_score(ground_truth, prediction, zero_division=0
                                     , average='weighted')
       f1 = metrics.f1_score(ground_truth, prediction, zero_division=0, average='weighted')
-      result_metrics = {'acc' : accuracy, 'pre': precision, 'rec':recall, 'f1': f1}
+      result_metrics = {'acc' : accuracy, 'pre': precision, 'rec':recall, 'f1': f1,
+                        "pre_macro": metrics.precision_score(ground_truth, prediction, zero_division=0, average='macro')
+                        , "rec_macro": metrics.recall_score(ground_truth, prediction, zero_division=0, average='macro')
+                        , "f1_macro": metrics.f1_score(ground_truth, prediction, zero_division=0, average='macro')}
 
       self.log(title + " Metrics: \n")
       self.log("loss: " + str(loss.item()))      
@@ -245,17 +249,6 @@ class TorchTrainer:
       self.log(confusion_matrix(ground_truth, prediction))
 
       return result_metrics
-
-
-    def __compute_metrics(self, pred):
-      labels = pred.label_ids
-      preds = pred.predictions.argmax(-1)
-      # calculate accuracy using sklearn's function
-      acc = metrics.accuracy_score(labels, preds)
-      f1 = metrics.f1_score(labels, preds, average='micro')
-      f1_macro = metrics.f1_score(labels, preds, average='macro')
-
-      return {'accuracy': acc, 'f1-micro': f1, 'f1-macro': f1_macro}
 
 
     def __visualize_token2token_scores(self, scores_mat, all_tokens, 
