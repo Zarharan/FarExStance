@@ -1,2 +1,2 @@
-# ParsSDT
-ParsSDT: a Dataset for Farsi Stance Detection Task with Evidence
+# FarExStance: Explainable Stance Detection for Farsi
+FarExStance: The first and largest claim-based explainable stance detection dataset on Farsi
