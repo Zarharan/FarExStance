@@ -2,7 +2,7 @@
 
 **Note:** Updates to this repository are coming soon!  
 
-This repository contains the data and code for the paper [FarExStance: Explainable Stance Detection for Farsi](https://coling2025.org/program/main_conference_papers/#long-papers), which will be presented at the 31st International Conference on Computational Linguistics (COLING 2025).  
+This repository contains the data and code for the paper [FarExStance: Explainable Stance Detection for Farsi](https://aclanthology.org/2025.coling-main.676/), which will be presented at the 31st International Conference on Computational Linguistics (COLING 2025).  
 
 ## Introduction  
 _FarExStance_ introduces the first and largest claim-based explainable stance detection dataset for Farsi. This dataset enables new research in stance detection by providing high-quality annotations and supporting evidence.  
