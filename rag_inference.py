@@ -143,8 +143,10 @@ class RAGInference():
         self.few_shot_examples= ""
 
         if args.prompt_type== "few":
-            # assert args.demon_set, "Enter the demonstration set name by using -demon_set argument!"
-            self.few_shot_set= pd.read_excel(f"data/b2c/{self.few_shot_samples_fname}.xlsx")    
+            assert args.demon_set, "Enter the demonstration set name by using -demon_set argument!"
+            self.few_shot_set= pd.read_excel(f"{self.few_shot_samples_fname}")
+            #  Set few shot examples to self.few_shot_examples
+            self.__get_fewshot_examples(shuffle= False)
 
         print(f"args.load_in_4bit: {args.load_in_4bit}, args.load_in_8bit: {args.load_in_8bit}")
 
@@ -332,7 +334,7 @@ class RAGInference():
             # Run
             inputs_dict= {"context":"\n".join([doc.page_content for doc in matched_docs]),"claim":self.preprocessor.clean_text(self.target_df.iloc[index].claim), "discriminant":discriminant}
             if self.args.prompt_type=="few":
-                inputs_dict["examples"]= self.__get_fewshot_examples(shuffle= False)
+                inputs_dict["examples"]= self.few_shot_examples
 
             result= chain.invoke(inputs_dict)
             # print(f"Result:\n{result}")
@@ -565,13 +567,9 @@ def main():
     parser.add_argument("-test_samples_no", "--test_samples_no", help = "The number of samples for test section of prompt paradigm"
     , default=1, type= int)
 
-    # 0 mean zero-shot experiment
-    parser.add_argument("-demon_samples_no", "--demon_samples_no", help = "The number of samples for demonstration section of prompt paradigm"
-    , default=1, type= int)
-
     parser.add_argument("-demon_set", "--demon_set"
     , help = "The target dataset name to select the demonstration instances from"
-    , type=str, default='dev_set_final.xlsx')
+    , type=str, default='data/b2c/few_shot_samples_revised_unrelated.xlsx')
 
     parser.add_argument("-test_set", "--test_set"
     , help = "The target dataset name to select the test instances from"
@@ -581,7 +579,7 @@ def main():
     , default=313, type= int)
 
     parser.add_argument("-prompt_template", "--prompt_template", help = "The target template to create prompt"
-    , default='first_attempt', choices=['first_attempt', 'second_attempt', 'third_attempt', 'fewshot_template', "peft_template"])
+    , default='first_attempt', choices=['first_attempt', 'second_attempt', 'third_attempt', 'fourth_attempt', 'fewshot_template', "peft_template"])
 
     parser.add_argument("-model_type", "--model_type", help = "The type of model which can include OpenAI, Claude, and HuggingFace models."
     , default='HuggingFace', choices=['OpenAI', 'HuggingFace', 'Claude'])    
@@ -618,9 +616,7 @@ def main():
 
     assert args.test_set, "At least enter the test set name by using -test_set argument!"
 
-    few_shot_samples_fname= "few_shot_samples_revised_unrelated"
-
-    rag_inference_obj = RAGInference(args=args, few_shot_samples_fname= few_shot_samples_fname)
+    rag_inference_obj = RAGInference(args=args, few_shot_samples_fname= args.demon_set)
 
     target_df= rag_inference_obj.get_results()
 
